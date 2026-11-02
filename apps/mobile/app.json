@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "DVC",
+    "slug": "dvc",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1F3A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dvc.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1F3A"
+      },
+      "package": "com.dvc.app"
+    },
+    "extra": {
+      "apiUrl": "http://localhost:3001"
+    }
+  }
+}
