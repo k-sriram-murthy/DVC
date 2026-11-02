@@ -162,14 +162,14 @@ Tokens live in `packages/shared` and are imported by the mobile theme.
 ## 7. Acceptance criteria for the scaffold PR
 
 - [x] Implementation plan in Project store `docs/implementation-plan.md`
-- [ ] Empty-repo confirmation documented
-- [ ] pnpm monorepo: `apps/api`, `apps/mobile`, `packages/shared`
-- [ ] Prisma migration covering core tables (users, projects, assignments, vendors, expenses, payments, allocations, activities, photos, approvals, audit, …)
-- [ ] Auth with hashed passwords; `/me` returns role from server
-- [ ] API middleware stubs for RBAC + project access
-- [ ] Mobile role-aware nav shells + expense fast-path form skeleton
-- [ ] README with local run instructions
-- [ ] Branch + PR against `main`
+- [x] Empty-repo confirmation documented (public empty GitHub repo; no prior app code)
+- [x] pnpm monorepo: `apps/api`, `apps/mobile`, `packages/shared`
+- [x] Prisma migration covering core tables (users, projects, assignments, vendors, expenses, payments, allocations, activities, photos, approvals, audit, …)
+- [x] Auth with hashed passwords; `/me` returns role from server
+- [x] API middleware stubs for RBAC + project access
+- [x] Mobile role-aware nav shells + expense fast-path form skeleton
+- [x] README with local run instructions
+- [ ] Branch + PR against `main` — **blocked: HTTPS push requires GitHub credentials** (clone/fetch works; push fails with `fatal: could not read Username for 'https://github.com': terminal prompts disabled`)
 
 ---
 
