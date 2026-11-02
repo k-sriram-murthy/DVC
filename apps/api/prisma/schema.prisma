@@ -1,0 +1,520 @@
+// DVC Prisma schema — mirrors PRD §9 data model.
+// Invoices/expenses and payments are separate; allocations link them.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  DIRECTOR
+  PROJECT_MANAGER
+  SITE_SUPERVISOR
+  CUSTOMER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum AssignmentRole {
+  PROJECT_MANAGER
+  SITE_SUPERVISOR
+  CUSTOMER
+}
+
+enum VendorType {
+  MATERIAL
+  LABOUR
+  BOTH
+}
+
+enum ExpenseType {
+  MATERIAL
+  LABOUR
+}
+
+enum ApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+enum PaymentMethod {
+  UPI
+  BANK_TRANSFER
+  CASH
+  CHEQUE
+  OTHER
+}
+
+enum PaymentRecordStatus {
+  ACTIVE
+  CANCELLED
+  REVERSED
+}
+
+enum PhotoVisibility {
+  INTERNAL
+  CUSTOMER_VISIBLE
+}
+
+enum ReceiptType {
+  FORMAL_INVOICE
+  HANDWRITTEN_RECEIPT
+  NO_FORMAL_INVOICE
+  OTHER
+}
+
+enum BudgetVersionStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ActivityStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+  ON_HOLD
+}
+
+enum AdvanceStatus {
+  OPEN
+  FULLY_ALLOCATED
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String?  @unique
+  mobile       String?  @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  createdProjects      Project[]          @relation("ProjectCreatedBy")
+  assignments          ProjectAssignment[]
+  submittedExpenses    Expense[]          @relation("ExpenseSubmittedBy")
+  approvedExpenses     Expense[]          @relation("ExpenseApprovedBy")
+  recordedPayments     Payment[]          @relation("PaymentRecordedBy")
+  approvedPayments     Payment[]          @relation("PaymentApprovedBy")
+  assignedActivities   Activity[]         @relation("ActivityAssignee")
+  progressUpdates      ProgressUpdate[]
+  photos               ProjectPhoto[]
+  documents            Document[]
+  approvalsRequested   Approval[]         @relation("ApprovalRequestedBy")
+  approvalsAssigned    Approval[]         @relation("ApprovalAssignedTo")
+  approvalsDecided     Approval[]         @relation("ApprovalDecidedBy")
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+  budgetCreated        ProjectBudget[]    @relation("BudgetCreatedBy")
+  budgetApproved       ProjectBudget[]    @relation("BudgetApprovedBy")
+  advancesCreated      VendorAdvance[]
+
+  @@map("users")
+}
+
+model Project {
+  id                      String        @id @default(cuid())
+  projectCode             String        @unique @map("project_code")
+  name                    String
+  description             String?
+  location                String?
+  customerId              String?       @map("customer_id")
+  startDate               DateTime?     @map("start_date") @db.Date
+  expectedCompletionDate  DateTime?     @map("expected_completion_date") @db.Date
+  actualCompletionDate    DateTime?     @map("actual_completion_date") @db.Date
+  status                  ProjectStatus @default(ACTIVE)
+  approvedBudget          Decimal       @default(0) @map("approved_budget") @db.Decimal(18, 2)
+  currency                String        @default("INR")
+  createdById             String        @map("created_by")
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+  archivedAt              DateTime?     @map("archived_at")
+
+  createdBy   User                @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  assignments ProjectAssignment[]
+  budgets     ProjectBudget[]
+  expenses    Expense[]
+  payments    Payment[]
+  advances    VendorAdvance[]
+  activities  Activity[]
+  progress    ProgressUpdate[]
+  photos      ProjectPhoto[]
+  documents   Document[]
+
+  @@index([status])
+  @@index([customerId])
+  @@map("projects")
+}
+
+model ProjectAssignment {
+  id             String         @id @default(cuid())
+  projectId      String         @map("project_id")
+  userId         String         @map("user_id")
+  assignmentRole AssignmentRole @map("assignment_role")
+  assignedAt     DateTime       @default(now()) @map("assigned_at")
+  active         Boolean        @default(true)
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId, assignmentRole])
+  @@index([userId, active])
+  @@map("project_assignments")
+}
+
+model Vendor {
+  id                    String     @id @default(cuid())
+  name                  String
+  vendorType            VendorType @map("vendor_type")
+  contactPerson         String?    @map("contact_person")
+  mobile                String?
+  email                 String?
+  address               String?
+  taxRegistrationNumber String?    @map("tax_registration_number")
+  notes                 String?
+  active                Boolean    @default(true)
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+
+  expenses Expense[]
+  payments Payment[]
+  advances VendorAdvance[]
+
+  @@index([vendorType, active])
+  @@map("vendors")
+}
+
+model BudgetCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  budgets  ProjectBudget[]
+  expenses Expense[]
+
+  @@map("budget_categories")
+}
+
+model ProjectBudget {
+  id             String              @id @default(cuid())
+  projectId      String              @map("project_id")
+  categoryId     String              @map("category_id")
+  approvedAmount Decimal             @map("approved_amount") @db.Decimal(18, 2)
+  version        Int                 @default(1)
+  status         BudgetVersionStatus @default(DRAFT)
+  createdById    String              @map("created_by")
+  approvedById   String?             @map("approved_by")
+  approvedAt     DateTime?           @map("approved_at")
+  reason         String?
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  project    Project        @relation(fields: [projectId], references: [id])
+  category   BudgetCategory @relation(fields: [categoryId], references: [id])
+  createdBy  User           @relation("BudgetCreatedBy", fields: [createdById], references: [id])
+  approvedBy User?          @relation("BudgetApprovedBy", fields: [approvedById], references: [id])
+
+  @@unique([projectId, categoryId, version])
+  @@index([projectId, status])
+  @@map("project_budgets")
+}
+
+/// Vendor bill / expense document (invoice). Separate from Payment.
+model Expense {
+  id              String         @id @default(cuid())
+  expenseNumber   String         @unique @map("expense_number")
+  projectId       String         @map("project_id")
+  vendorId        String         @map("vendor_id")
+  categoryId      String?        @map("category_id")
+  expenseType     ExpenseType    @map("expense_type")
+  invoiceNumber   String?        @map("invoice_number")
+  invoiceDate     DateTime?      @map("invoice_date") @db.Date
+  transactionDate DateTime       @map("transaction_date") @db.Date
+  description     String?
+  subtotal        Decimal        @default(0) @db.Decimal(18, 2)
+  taxAmount       Decimal        @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  totalAmount     Decimal        @map("total_amount") @db.Decimal(18, 2)
+  currency        String         @default("INR")
+  receiptType     ReceiptType    @default(FORMAL_INVOICE) @map("receipt_type")
+  approvalStatus  ApprovalStatus @default(DRAFT) @map("approval_status")
+  paymentStatus   PaymentStatus  @default(UNPAID) @map("payment_status")
+  submittedById   String         @map("submitted_by")
+  submittedAt     DateTime?      @map("submitted_at")
+  approvedById    String?        @map("approved_by")
+  approvedAt      DateTime?      @map("approved_at")
+  rejectionReason String?        @map("rejection_reason")
+  materialName    String?        @map("material_name")
+  quantity        Decimal?       @db.Decimal(18, 4)
+  unit            String?
+  unitPrice       Decimal?       @map("unit_price") @db.Decimal(18, 2)
+  labourCategory  String?        @map("labour_category")
+  workerCount     Int?           @map("worker_count")
+  dayCount        Int?           @map("day_count")
+  activityId      String?        @map("activity_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  deletedAt       DateTime?      @map("deleted_at")
+
+  project     Project             @relation(fields: [projectId], references: [id])
+  vendor      Vendor              @relation(fields: [vendorId], references: [id])
+  category    BudgetCategory?     @relation(fields: [categoryId], references: [id])
+  submittedBy User                @relation("ExpenseSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy  User?               @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  lineItems   ExpenseLineItem[]
+  allocations PaymentAllocation[]
+  documents   Document[]
+
+  @@index([projectId, transactionDate])
+  @@index([vendorId])
+  @@index([approvalStatus, paymentStatus])
+  @@index([submittedById])
+  @@map("expenses")
+}
+
+model ExpenseLineItem {
+  id         String   @id @default(cuid())
+  expenseId  String   @map("expense_id")
+  itemName   String   @map("item_name")
+  quantity   Decimal  @db.Decimal(18, 4)
+  unit       String?
+  unitPrice  Decimal  @map("unit_price") @db.Decimal(18, 2)
+  taxAmount  Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  lineTotal  Decimal  @map("line_total") @db.Decimal(18, 2)
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+  @@map("expense_line_items")
+}
+
+/// Money actually paid. Separate from Expense/invoice.
+model Payment {
+  id               String              @id @default(cuid())
+  paymentNumber    String              @unique @map("payment_number")
+  projectId        String              @map("project_id")
+  vendorId         String              @map("vendor_id")
+  amount           Decimal             @db.Decimal(18, 2)
+  paymentDate      DateTime            @map("payment_date") @db.Date
+  paymentMethod    PaymentMethod       @map("payment_method")
+  paymentReference String?             @map("payment_reference")
+  description      String?
+  status           PaymentRecordStatus @default(ACTIVE)
+  recordedById     String              @map("recorded_by")
+  approvedById     String?             @map("approved_by")
+  createdAt        DateTime            @default(now()) @map("created_at")
+
+  project     Project             @relation(fields: [projectId], references: [id])
+  vendor      Vendor              @relation(fields: [vendorId], references: [id])
+  recordedBy  User                @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  approvedBy  User?               @relation("PaymentApprovedBy", fields: [approvedById], references: [id])
+  allocations PaymentAllocation[]
+  advances    VendorAdvance[]
+
+  @@index([projectId, paymentDate])
+  @@index([vendorId])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id              String   @id @default(cuid())
+  paymentId       String   @map("payment_id")
+  expenseId       String   @map("expense_id")
+  allocatedAmount Decimal  @map("allocated_amount") @db.Decimal(18, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+  expense Expense @relation(fields: [expenseId], references: [id])
+
+  @@index([paymentId])
+  @@index([expenseId])
+  @@map("payment_allocations")
+}
+
+model VendorAdvance {
+  id          String        @id @default(cuid())
+  vendorId    String        @map("vendor_id")
+  projectId   String        @map("project_id")
+  amount      Decimal       @db.Decimal(18, 2)
+  advanceDate DateTime      @map("advance_date") @db.Date
+  description String?
+  paymentId   String?       @map("payment_id")
+  status      AdvanceStatus @default(OPEN)
+  createdById String        @map("created_by")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  project   Project  @relation(fields: [projectId], references: [id])
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([vendorId, projectId])
+  @@map("vendor_advances")
+}
+
+model Activity {
+  id                 String         @id @default(cuid())
+  projectId          String         @map("project_id")
+  name               String
+  description        String?
+  assignedToId       String?        @map("assigned_to")
+  startDate          DateTime?      @map("start_date") @db.Date
+  dueDate            DateTime?      @map("due_date") @db.Date
+  progressPercentage Decimal        @default(0) @map("progress_percentage") @db.Decimal(5, 2)
+  weight             Decimal        @default(1) @db.Decimal(8, 2)
+  status             ActivityStatus @default(NOT_STARTED)
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  project      Project          @relation(fields: [projectId], references: [id])
+  assignedTo   User?            @relation("ActivityAssignee", fields: [assignedToId], references: [id])
+  progressLogs ProgressUpdate[]
+  photos       ProjectPhoto[]
+
+  @@index([projectId, status])
+  @@map("activities")
+}
+
+model ProgressUpdate {
+  id                 String   @id @default(cuid())
+  projectId          String   @map("project_id")
+  activityId         String   @map("activity_id")
+  reportedById       String   @map("reported_by")
+  reportingDate      DateTime @map("reporting_date") @db.Date
+  progressPercentage Decimal  @map("progress_percentage") @db.Decimal(5, 2)
+  remarks            String?
+  delayReason        String?  @map("delay_reason")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  project    Project  @relation(fields: [projectId], references: [id])
+  activity   Activity @relation(fields: [activityId], references: [id])
+  reportedBy User     @relation(fields: [reportedById], references: [id])
+
+  @@index([projectId, reportingDate])
+  @@index([activityId])
+  @@map("progress_updates")
+}
+
+model ProjectPhoto {
+  id            String          @id @default(cuid())
+  projectId     String          @map("project_id")
+  activityId    String?         @map("activity_id")
+  uploadedById  String          @map("uploaded_by")
+  photoDate     DateTime        @map("photo_date") @db.Date
+  fileReference String          @map("file_reference")
+  caption       String?
+  visibility    PhotoVisibility @default(INTERNAL)
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  project    Project   @relation(fields: [projectId], references: [id])
+  activity   Activity? @relation(fields: [activityId], references: [id])
+  uploadedBy User      @relation(fields: [uploadedById], references: [id])
+
+  @@index([projectId, photoDate])
+  @@map("project_photos")
+}
+
+model Document {
+  id               String   @id @default(cuid())
+  projectId        String?  @map("project_id")
+  expenseId        String?  @map("expense_id")
+  uploadedById     String   @map("uploaded_by")
+  documentType     String   @map("document_type")
+  fileReference    String   @map("file_reference")
+  originalFilename String   @map("original_filename")
+  mimeType         String   @map("mime_type")
+  fileSize         Int      @map("file_size")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  project    Project? @relation(fields: [projectId], references: [id])
+  expense    Expense? @relation(fields: [expenseId], references: [id])
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+
+  @@index([projectId])
+  @@index([expenseId])
+  @@map("documents")
+}
+
+model Approval {
+  id                 String           @id @default(cuid())
+  entityType         String           @map("entity_type")
+  entityId           String           @map("entity_id")
+  requestedById      String           @map("requested_by")
+  assignedApproverId String?          @map("assigned_approver_id")
+  status             ApprovalDecision @default(PENDING)
+  decision           ApprovalDecision @default(PENDING)
+  decisionReason     String?          @map("decision_reason")
+  decidedById        String?          @map("decided_by")
+  decidedAt          DateTime?        @map("decided_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  requestedBy      User  @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
+  assignedApprover User? @relation("ApprovalAssignedTo", fields: [assignedApproverId], references: [id])
+  decidedBy        User? @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([status, assignedApproverId])
+  @@map("approvals")
+}
+
+model Notification {
+  id               String    @id @default(cuid())
+  userId           String    @map("user_id")
+  notificationType String    @map("notification_type")
+  title            String
+  message          String
+  entityType       String?   @map("entity_type")
+  entityId         String?   @map("entity_id")
+  readAt           DateTime? @map("read_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

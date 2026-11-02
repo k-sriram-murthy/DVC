@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dvc
+      POSTGRES_PASSWORD: dvc_dev
+      POSTGRES_DB: dvc
+    ports:
+      - "5432:5432"
+    volumes:
+      - dvc_pg:/var/lib/postgresql/data
+
+volumes:
+  dvc_pg:

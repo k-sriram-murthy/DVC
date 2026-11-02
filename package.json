@@ -1,0 +1,19 @@
+{
+  "name": "dvc",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Devi Vasantha Constructions — construction project management",
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "dev:api": "pnpm --filter @dvc/api dev",
+    "dev:mobile": "pnpm --filter @dvc/mobile start",
+    "db:migrate": "pnpm --filter @dvc/api db:migrate",
+    "db:seed": "pnpm --filter @dvc/api db:seed",
+    "db:generate": "pnpm --filter @dvc/api db:generate",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
